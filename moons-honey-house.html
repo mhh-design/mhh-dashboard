@@ -825,6 +825,21 @@
       <div class="stat-value" id="ov-units">—</div>
       <div class="stat-note">All products</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-label">Cash Sales</div>
+      <div class="stat-value" id="ov-cash">—</div>
+      <div class="stat-note">From Transactions CSV</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Card Sales</div>
+      <div class="stat-value" id="ov-card">—</div>
+      <div class="stat-note">From Transactions CSV</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Card Processing Fees (Actual)</div>
+      <div class="stat-value" id="ov-txfees">—</div>
+      <div class="stat-note">From Transactions CSV, vs. estimated Square Fees above</div>
+    </div>
   </div>
 
   <div class="section-title" style="font-size:1.15rem; margin-bottom:16px;">Where Your Money Goes</div>
@@ -1278,6 +1293,16 @@
       </ol>
     </div>
     <div class="guide-card">
+      <div class="guide-icon">💳</div>
+      <h4>Square Transactions Import</h4>
+      <ol>
+        <li>Log into <strong>Square Dashboard</strong></li>
+        <li>Go to Reports → Sales → Transactions</li>
+        <li>Set your date range, click Export (CSV)</li>
+        <li>Upload the file below for cash/card split & fees</li>
+      </ol>
+    </div>
+    <div class="guide-card">
       <div class="guide-icon">🏦</div>
       <h4>Bank / Credit Card</h4>
       <ol>
@@ -1306,6 +1331,17 @@
   </label>
   <input type="file" id="squareFile" accept=".csv" onchange="loadSquareCSV(this)">
   <div id="squareBadge"></div>
+
+  <!-- Transaction upload -->
+  <label for="txFile">
+    <div class="upload-section" onclick="document.getElementById('txFile').click()">
+      <div class="upload-icon">💳</div>
+      <h3>Upload Square Transactions CSV</h3>
+      <p>Adds Cash vs Card split and actual processing fees to your Overview tab</p>
+    </div>
+  </label>
+  <input type="file" id="txFile" accept=".csv" onchange="loadTransactionCSV(this)">
+  <div id="txBadge"></div>
 
   <!-- Bank upload -->
   <label for="bankFile">
@@ -1634,6 +1670,7 @@ const LS_COMP_RCV   = 'mhh_comp_rcv_v1';
 const LS_BATCHES    = 'mhh_batches_v1';
 const LS_RECIPES    = 'mhh_recipes_v1';
 const LS_BULK_HONEY = 'mhh_bulk_honey_v1';
+const LS_TX_PAYMENT = 'mhh_tx_payment_v1';
 
 // ─────────────────────────────────────────────
 // FIREBASE SETUP
@@ -1682,7 +1719,7 @@ function fbSave() {
     const keys = [
       LS_COSTS, LS_EXPENSES, LS_INVENTORY, LS_SALES,
       LS_HONEY, LS_COMP_STOCK, LS_COMP_RCV,
-      LS_BATCHES, LS_RECIPES, LS_BULK_HONEY
+      LS_BATCHES, LS_RECIPES, LS_BULK_HONEY, LS_TX_PAYMENT
     ];
     keys.forEach(k => {
       try {
@@ -1706,7 +1743,7 @@ function fbLoad() {
       const keys = [
         LS_COSTS, LS_EXPENSES, LS_HONEY,
         LS_COMP_STOCK, LS_COMP_RCV, LS_BATCHES,
-        LS_RECIPES, LS_BULK_HONEY
+        LS_RECIPES, LS_BULK_HONEY, LS_TX_PAYMENT
         // Note: LS_SALES and LS_INVENTORY are large seed data —
         // only sync if they've been explicitly saved (user imported)
       ];
@@ -1733,6 +1770,7 @@ function fbLoad() {
         batchLog      = lsLoad(LS_BATCHES,    []);
         recipes       = Object.assign({}, RECIPE_SEED, lsLoad(LS_RECIPES, {}));
         bulkHoney     = lsLoad(LS_BULK_HONEY, []);
+        txPaymentData = lsLoad(LS_TX_PAYMENT, []);
         // Re-render everything with fresh data
         populateExpenseCatFilter();
         populateSalesLocFilter();
@@ -1773,6 +1811,7 @@ let batchLog     = lsLoad(LS_BATCHES,    []);
 const RECIPE_SEED = {"HON-BAS-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-BAS-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-BAS-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-BLA-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-BLA-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-BLA-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-BLA-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-BLA-2LB-2":[{"name":"2 lb glass","qty":1},{"name":"2lb glass metal lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-FOR-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-FOR-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-FOR-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-FOR-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-HOT-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-HOT-75LB":[{"name":".75 plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-MIL-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-MIL-75LB":[{"name":".75 plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-KNO-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-KNO-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-KNO-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-KNO-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-KNO-2LB-2":[{"name":"2 lb glass","qty":1},{"name":"2lb glass metal lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-MHW-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-MHW-1lb":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-MHW-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-NHD-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-NHD-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-NHD-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-NHL-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-NHL-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-NHL-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-ORA-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-ORA-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-ORA-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-ORA-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-ORA-2LB-2":[{"name":"2 lb glass","qty":1},{"name":"2lb glass metal lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-PEE-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-PEE-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-PEE-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-PEE-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-PEE-2LB-2":[{"name":"2 lb glass","qty":1},{"name":"2lb glass metal lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-POP-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-POP-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-POP-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-SOU-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-SOU-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-WIL-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1.5 lb bottle label","qty":1}],"HON-WIL-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-WIL-2LB":[{"name":"2 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-WIL-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-WIL-2LB-2":[{"name":"2 lb glass","qty":1},{"name":"2lb glass metal lid","qty":1},{"name":"2 lb bottle label","qty":1}],"HON-SUN-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-SAG-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-COR-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-CAR-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-TUP-1LB-2":[{"name":"1 lb glass","qty":1},{"name":"1 lb glass metal lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-TUP-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-SUN-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-SAG-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-COR-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-CAR-1LB":[{"name":"1 lb plastic bottle","qty":1},{"name":"Flip-top lid","qty":1},{"name":"1 lb bottle label","qty":1}],"HON-TAS-BLK":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-COR":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-SAG":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-TUP":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-FOR":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-ORA":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-SUN":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-KNO":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-TAS-CAR":[{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-KIT-BLK":[{"name":"Tasking kit box","qty":1},{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-KIT-SAG":[{"name":"Tasking kit box","qty":1},{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}],"HON-KIT-TUP":[{"name":"Tasking kit box","qty":1},{"name":"Tasting jar","qty":1},{"name":"Tasting jar lid","qty":1},{"name":"Tasting Box label","qty":2},{"name":"Tasting note card","qty":7}]};
 let recipes = Object.assign({}, RECIPE_SEED, lsLoad(LS_RECIPES, {}));
 let bulkHoney    = lsLoad(LS_BULK_HONEY, []);
+let txPaymentData = lsLoad(LS_TX_PAYMENT, []);
 let squareLoaded = salesData.length > 0;
 let salesView    = 'sku';
 let ciView       = 'stock';
@@ -2004,6 +2043,23 @@ function renderOverview() {
   document.getElementById('ov-profit').textContent   = fmt$(profit);
   document.getElementById('ov-margin').textContent   = grossRev > 0 ? margin + '%'   : '—';
   document.getElementById('ov-units').textContent    = totalUnits > 0 ? fmtN(Math.round(totalUnits)) : '—';
+
+  // ── Cash/Card split + actual transaction fees ──────────────────
+  const filtTx = txPaymentData.filter(t => {
+    const d = new Date((t.date||'') + 'T00:00:00');
+    const loc = t.location || '';
+    if (fromDate && d < fromDate) return false;
+    if (toDate   && d > toDate)   return false;
+    if (market && !loc.toLowerCase().includes(market.toLowerCase())) return false;
+    return true;
+  });
+  const cashTotal = filtTx.filter(t => t.payment === 'Cash').reduce((a,t) => a + t.grossSales, 0);
+  const cardTotal = filtTx.filter(t => t.payment === 'Card').reduce((a,t) => a + t.grossSales, 0);
+  const txFeeTotal = filtTx.reduce((a,t) => a + t.fee, 0);
+
+  document.getElementById('ov-cash').textContent   = filtTx.length > 0 ? fmt$(cashTotal)  : '—';
+  document.getElementById('ov-card').textContent   = filtTx.length > 0 ? fmt$(cardTotal)  : '—';
+  document.getElementById('ov-txfees').textContent = filtTx.length > 0 ? fmt$(txFeeTotal) : '—';
 
   // ── Stat card notes ───────────────────────────────────────────
   const noteMap = {
@@ -2922,6 +2978,52 @@ function loadSquareCSV(input) {
         `<div class="upload-result">✅ Square data loaded · ${fmtN(salesData.length)} total rows</div>`;
       populateSalesLocFilter();
       renderSales();
+      renderOverview();
+    }
+  });
+}
+
+function loadTransactionCSV(input) {
+  if (!input.files[0]) return;
+  Papa.parse(input.files[0], {
+    header: true,
+    skipEmptyLines: true,
+    complete(res) {
+      const newRows = res.data.map(r => {
+        const cardBrand = (r['Card Brand'] || r['card_brand'] || '').trim();
+        const payment = cardBrand ? 'Card' : 'Cash';
+        const grossSales = parseFloat(
+          (r['Gross Sales'] || r['Total Collected'] || r['gross_sales'] || '0')
+          .toString().replace(/[$,]/g,'')
+        ) || 0;
+        const fee = parseFloat(
+          (r['Fees'] || r['fee'] || '0').toString().replace(/[$,]/g,'')
+        ) || 0;
+        const netTotal = parseFloat(
+          (r['Net Total'] || r['net_total'] || '0').toString().replace(/[$,]/g,'')
+        ) || 0;
+        return {
+          date:          normalizeDate(r['Date'] || r['date'] || ''),
+          transactionId: r['Transaction ID'] || r['transaction_id'] || r['Payment ID'] || '',
+          grossSales,
+          fee,
+          netTotal,
+          payment,
+          cardBrand,
+          location:      r['Location'] || r['location'] || '',
+        };
+      }).filter(r => r.transactionId);
+
+      const existingIds = new Set(txPaymentData.map(t => t.transactionId));
+      const addedRows = newRows.filter(r => !existingIds.has(r.transactionId));
+      const skippedCount = newRows.length - addedRows.length;
+
+      txPaymentData = [...txPaymentData, ...addedRows];
+      lsSave(LS_TX_PAYMENT, txPaymentData);
+
+      const skipNote = skippedCount > 0 ? ` · ${fmtN(skippedCount)} duplicates skipped` : '';
+      document.getElementById('txBadge').innerHTML =
+        `<div class="upload-result">✅ Added ${fmtN(addedRows.length)} new rows${skipNote} · ${fmtN(txPaymentData.length)} total</div>`;
       renderOverview();
     }
   });
