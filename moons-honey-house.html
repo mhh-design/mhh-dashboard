@@ -1685,6 +1685,8 @@ const firebaseConfig = {
 };
 
 let db = null, MHH = null;
+const TX_CHUNK_SIZE = 1500; // rows per Firestore doc, keeps each chunk well under the 1MB limit
+let fbSaveTxTimer = null;
 try {
   firebase.initializeApp(firebaseConfig);
   db  = firebase.firestore();
@@ -1719,7 +1721,10 @@ function fbSave() {
     const keys = [
       LS_COSTS, LS_EXPENSES, LS_INVENTORY, LS_SALES,
       LS_HONEY, LS_COMP_STOCK, LS_COMP_RCV,
-      LS_BATCHES, LS_RECIPES, LS_BULK_HONEY, LS_TX_PAYMENT
+      LS_BATCHES, LS_RECIPES, LS_BULK_HONEY
+      // Note: LS_TX_PAYMENT is excluded — transaction data is large
+      // (thousands of rows) and can push the document over Firestore's
+      // 1MB limit, which silently fails the ENTIRE sync. Kept device-local.
     ];
     keys.forEach(k => {
       try {
@@ -1743,7 +1748,7 @@ function fbLoad() {
       const keys = [
         LS_COSTS, LS_EXPENSES, LS_HONEY,
         LS_COMP_STOCK, LS_COMP_RCV, LS_BATCHES,
-        LS_RECIPES, LS_BULK_HONEY, LS_TX_PAYMENT
+        LS_RECIPES, LS_BULK_HONEY
         // Note: LS_SALES and LS_INVENTORY are large seed data —
         // only sync if they've been explicitly saved (user imported)
       ];
@@ -1771,6 +1776,7 @@ function fbLoad() {
         recipes       = Object.assign({}, RECIPE_SEED, lsLoad(LS_RECIPES, {}));
         bulkHoney     = lsLoad(LS_BULK_HONEY, []);
         txPaymentData = lsLoad(LS_TX_PAYMENT, []);
+        if (!Array.isArray(txPaymentData)) txPaymentData = [];
         // Re-render everything with fresh data
         populateExpenseCatFilter();
         populateSalesLocFilter();
@@ -1798,6 +1804,71 @@ function fbLoad() {
 }
 
 // ─────────────────────────────────────────────
+// TRANSACTION DATA — chunked cloud sync
+// Transaction data can run into the thousands of rows, easily exceeding
+// Firestore's 1MB per-document limit. Instead of storing it in the main
+// mhh/data document (which would break syncing for everything else if
+// oversized), each chunk is written to its own document:
+//   mhh/tx_meta      → { chunkCount: N }
+//   mhh/tx_chunk_0, mhh/tx_chunk_1, ... → { rows: [...] }
+// ─────────────────────────────────────────────
+function fbSaveTx() {
+  clearTimeout(fbSaveTxTimer);
+  fbSaveTxTimer = setTimeout(async () => {
+    if (!db) return;
+    try {
+      const metaRef = db.collection('mhh').doc('tx_meta');
+      const metaSnap = await metaRef.get();
+      const oldCount = metaSnap.exists ? (metaSnap.data().chunkCount || 0) : 0;
+
+      const chunks = [];
+      for (let i = 0; i < txPaymentData.length; i += TX_CHUNK_SIZE) {
+        chunks.push(txPaymentData.slice(i, i + TX_CHUNK_SIZE));
+      }
+      const newCount = chunks.length;
+
+      const batch = db.batch();
+      chunks.forEach((chunk, i) => {
+        batch.set(db.collection('mhh').doc('tx_chunk_' + i), { rows: chunk });
+      });
+      // Clean up any leftover chunks from a previous, larger upload
+      for (let i = newCount; i < oldCount; i++) {
+        batch.delete(db.collection('mhh').doc('tx_chunk_' + i));
+      }
+      batch.set(metaRef, { chunkCount: newCount });
+      await batch.commit();
+      console.log('Transaction data synced:', txPaymentData.length, 'rows in', newCount, 'chunks');
+    } catch (e) {
+      console.warn('Transaction sync failed:', e);
+    }
+  }, 800);
+}
+
+async function fbLoadTx() {
+  if (!db) return;
+  try {
+    const metaSnap = await db.collection('mhh').doc('tx_meta').get();
+    if (!metaSnap.exists) return;
+    const chunkCount = metaSnap.data().chunkCount || 0;
+    if (chunkCount === 0) return;
+    const gets = [];
+    for (let i = 0; i < chunkCount; i++) {
+      gets.push(db.collection('mhh').doc('tx_chunk_' + i).get());
+    }
+    const snaps = await Promise.all(gets);
+    let rows = [];
+    snaps.forEach(s => { if (s.exists) rows = rows.concat(s.data().rows || []); });
+    txPaymentData = rows;
+    if (!Array.isArray(txPaymentData)) txPaymentData = [];
+    try { localStorage.setItem(LS_TX_PAYMENT, JSON.stringify(txPaymentData)); } catch(e) {}
+    renderOverview();
+    console.log('Loaded', txPaymentData.length, 'transaction rows from cloud (', chunkCount, 'chunks)');
+  } catch (e) {
+    console.warn('Transaction load failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
 // STATE — loaded from localStorage or defaults
 // ─────────────────────────────────────────────
 let costsData    = lsLoad(LS_COSTS,      COSTS);
@@ -1812,6 +1883,7 @@ const RECIPE_SEED = {"HON-BAS-1.5LB":[{"name":"1.5 lb plastic bottle","qty":1},{
 let recipes = Object.assign({}, RECIPE_SEED, lsLoad(LS_RECIPES, {}));
 let bulkHoney    = lsLoad(LS_BULK_HONEY, []);
 let txPaymentData = lsLoad(LS_TX_PAYMENT, []);
+if (!Array.isArray(txPaymentData)) txPaymentData = [];
 let squareLoaded = salesData.length > 0;
 let salesView    = 'sku';
 let ciView       = 'stock';
@@ -2028,7 +2100,24 @@ function renderOverview() {
   // ── Calculate remaining metrics ───────────────────────────────
   const grossRev   = filtSales.reduce((a,r) => a + parseFloat(r['Gross Sales']||0), 0);
   const taxCol     = filtSales.reduce((a,r) => a + parseFloat(r['Tax']||r.tax||0), 0);
-  const sqFees     = filtSales.reduce((a,r) => a + parseFloat(r['Square Fee']||r.sq_fee_allocated||0), 0);
+  const sqFeesEst  = filtSales.reduce((a,r) => a + parseFloat(r['Square Fee']||r.sq_fee_allocated||0), 0);
+
+  // ── Cash/Card split + actual transaction fees ──────────────────
+  const filtTx = txPaymentData.filter(t => {
+    const d = new Date((t.date||'') + 'T00:00:00');
+    const loc = t.location || '';
+    if (fromDate && d < fromDate) return false;
+    if (toDate   && d > toDate)   return false;
+    if (market && !loc.toLowerCase().includes(market.toLowerCase())) return false;
+    return true;
+  });
+  const cashTotal = filtTx.filter(t => t.payment === 'Cash').reduce((a,t) => a + t.grossSales, 0);
+  const cardTotal = filtTx.filter(t => t.payment === 'Card').reduce((a,t) => a + t.grossSales, 0);
+  const txFeeTotal = filtTx.reduce((a,t) => a + t.fee, 0);
+
+  // Prefer the actual fee total from the Transactions CSV; fall back to the
+  // per-item estimate from the Item Sales CSV if no transactions are loaded.
+  const sqFees     = txFeeTotal > 0 ? txFeeTotal : sqFeesEst;
   const netRev     = grossRev - taxCol - sqFees;
   const profit     = netRev - totalExp;
   // Margin = net profit ÷ gross revenue (conventional)
@@ -2043,19 +2132,6 @@ function renderOverview() {
   document.getElementById('ov-profit').textContent   = fmt$(profit);
   document.getElementById('ov-margin').textContent   = grossRev > 0 ? margin + '%'   : '—';
   document.getElementById('ov-units').textContent    = totalUnits > 0 ? fmtN(Math.round(totalUnits)) : '—';
-
-  // ── Cash/Card split + actual transaction fees ──────────────────
-  const filtTx = txPaymentData.filter(t => {
-    const d = new Date((t.date||'') + 'T00:00:00');
-    const loc = t.location || '';
-    if (fromDate && d < fromDate) return false;
-    if (toDate   && d > toDate)   return false;
-    if (market && !loc.toLowerCase().includes(market.toLowerCase())) return false;
-    return true;
-  });
-  const cashTotal = filtTx.filter(t => t.payment === 'Cash').reduce((a,t) => a + t.grossSales, 0);
-  const cardTotal = filtTx.filter(t => t.payment === 'Card').reduce((a,t) => a + t.grossSales, 0);
-  const txFeeTotal = filtTx.reduce((a,t) => a + t.fee, 0);
 
   document.getElementById('ov-cash').textContent   = filtTx.length > 0 ? fmt$(cashTotal)  : '—';
   document.getElementById('ov-card').textContent   = filtTx.length > 0 ? fmt$(cardTotal)  : '—';
@@ -2996,9 +3072,9 @@ function loadTransactionCSV(input) {
           (r['Gross Sales'] || r['Total Collected'] || r['gross_sales'] || '0')
           .toString().replace(/[$,]/g,'')
         ) || 0;
-        const fee = parseFloat(
+        const fee = Math.abs(parseFloat(
           (r['Fees'] || r['fee'] || '0').toString().replace(/[$,]/g,'')
-        ) || 0;
+        ) || 0);
         const netTotal = parseFloat(
           (r['Net Total'] || r['net_total'] || '0').toString().replace(/[$,]/g,'')
         ) || 0;
@@ -3019,7 +3095,8 @@ function loadTransactionCSV(input) {
       const skippedCount = newRows.length - addedRows.length;
 
       txPaymentData = [...txPaymentData, ...addedRows];
-      lsSave(LS_TX_PAYMENT, txPaymentData);
+      try { localStorage.setItem(LS_TX_PAYMENT, JSON.stringify(txPaymentData)); } catch(e) {}
+      fbSaveTx();
 
       const skipNote = skippedCount > 0 ? ` · ${fmtN(skippedCount)} duplicates skipped` : '';
       document.getElementById('txBadge').innerHTML =
@@ -4278,6 +4355,7 @@ cbInit();
 showTab('overview');
 // Load cloud data — will re-render if newer data found
 fbLoad();
+fbLoadTx();
 
 // Show a badge if Square data was restored from storage
 if (squareLoaded && salesData.length > 0) {
