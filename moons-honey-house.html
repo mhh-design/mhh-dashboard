@@ -2078,11 +2078,12 @@ function renderOverview() {
     return true;
   });
 
-  // ── Filter expenses with market-aware splitting ───────────────
-  // CLT = full amount for CLT filter
-  // Soda City = full amount for Soda City filter
-  // Both = split 50/50 between markets
-  // Blank = shared overhead, included in All, split 50/50 when market filtered
+  // ── Filter expenses with market-aware splitting ────────────────
+  // CLT/Soda City/Belmont = full amount for their own filter
+  // Both = split 50/50 between CLT and Soda City (legacy 2-market tag)
+  // Blank = shared overhead — included only under "All markets";
+  //         contributes $0 to any single-market view, since overhead
+  //         isn't attributable to one specific market's performance.
   const filtExp = expensesData.filter(e => {
     const d = new Date((e.date||'') + 'T00:00:00');
     if (fromDate && d < fromDate) return false;
@@ -2099,18 +2100,16 @@ function renderOverview() {
     let include = 0;
 
     if (!market) {
-      include = amt; // all markets: full amount
+      include = amt; // all markets: full amount, including shared overhead
     } else if (market === 'Charlotte') {
       if (loc === 'CLT') include = amt;
       else if (loc === 'Both') include = amt / 2;
-      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
+      // blank (shared overhead) contributes 0 — only shown under All markets
     } else if (market === 'Soda City') {
       if (loc === 'Soda City') include = amt;
       else if (loc === 'Both') include = amt / 2;
-      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
     } else if (market === 'Belmont') {
       if (loc === 'Belmont') include = amt;
-      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
     }
 
     if (include > 0) {
@@ -2176,7 +2175,7 @@ function renderOverview() {
 
   // ── Stat card notes ───────────────────────────────────────────
   const noteMap = {
-    'ov-expenses': market ? `CLT-specific + ½ shared` : 'Operations + overhead',
+    'ov-expenses': market ? `Market-specific only (no shared overhead)` : 'Operations + overhead',
     'ov-profit':   market ? `After market-allocated costs` : 'Before owner pay',
     'ov-margin':   'Net profit ÷ gross revenue',
   };
