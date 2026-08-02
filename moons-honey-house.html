@@ -810,6 +810,11 @@
       <div class="stat-value" id="ov-expenses">—</div>
       <div class="stat-note">Operations + overhead</div>
     </div>
+    <div class="stat-card red">
+      <div class="stat-label">COGS</div>
+      <div class="stat-value" id="ov-cogs">—</div>
+      <div class="stat-note">Honey + packaging, per unit sold</div>
+    </div>
     <div class="stat-card green">
       <div class="stat-label">Net Profit</div>
       <div class="stat-value" id="ov-profit">—</div>
@@ -2115,6 +2120,19 @@ function renderOverview() {
   const taxCol     = filtSales.reduce((a,r) => a + parseFloat(r['Tax']||r.tax||0), 0);
   const sqFeesEst  = filtSales.reduce((a,r) => a + parseFloat(r['Square Fee']||r.sq_fee_allocated||0), 0);
 
+  // COGS — same per-SKU cost-per-unit × units-sold logic as the Sales tab,
+  // so Overview's Net Profit reflects what products actually cost to make.
+  const unitsBySku = {};
+  filtSales.forEach(r => {
+    const sku = r.SKU || r.sku || 'UNKNOWN';
+    const qty = parseFloat(r.Qty || r.qty || 0);
+    unitsBySku[sku] = (unitsBySku[sku] || 0) + qty;
+  });
+  const totalCogs = Object.entries(unitsBySku).reduce((sum, [sku, units]) => {
+    const costPer = getCostForSku(sku);
+    return costPer != null ? sum + costPer * units : sum;
+  }, 0);
+
   // ── Cash/Card split + actual transaction fees ──────────────────
   const filtTx = txPaymentData.filter(t => {
     const d = new Date((t.date||'') + 'T00:00:00');
@@ -2132,7 +2150,7 @@ function renderOverview() {
   // per-item estimate from the Item Sales CSV if no transactions are loaded.
   const sqFees     = txFeeTotal > 0 ? txFeeTotal : sqFeesEst;
   const netRev     = grossRev - taxCol - sqFees;
-  const profit     = netRev - totalExp;
+  const profit     = netRev - totalExp - totalCogs;
   // Margin = net profit ÷ gross revenue (conventional)
   const margin     = grossRev > 0 ? (profit / grossRev * 100).toFixed(1) : 0;
   const totalUnits = filtSales.reduce((a,r) => a + parseFloat(r.Qty||r.qty||0), 0);
@@ -2142,6 +2160,7 @@ function renderOverview() {
   document.getElementById('ov-sqfees').textContent   = sqFees   > 0 ? fmt$(sqFees)   : '—';
   document.getElementById('ov-revenue').textContent  = netRev   > 0 ? fmt$(netRev)   : '—';
   document.getElementById('ov-expenses').textContent = fmt$(totalExp);
+  document.getElementById('ov-cogs').textContent      = totalCogs > 0 ? fmt$(totalCogs) : '—';
   document.getElementById('ov-profit').textContent   = fmt$(profit);
   document.getElementById('ov-margin').textContent   = grossRev > 0 ? margin + '%'   : '—';
   document.getElementById('ov-units').textContent    = totalUnits > 0 ? fmtN(Math.round(totalUnits)) : '—';
