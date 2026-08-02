@@ -804,7 +804,7 @@
     <div class="stat-card">
       <div class="stat-label">Net Revenue</div>
       <div class="stat-value" id="ov-revenue">—</div>
-      <div class="stat-note">After tax & fees</div>
+      <div class="stat-note">After fees (Gross Sales already excludes tax)</div>
     </div>
     <div class="stat-card red">
       <div class="stat-label">Operating Expenses</div>
@@ -938,7 +938,7 @@
     <div class="stat-card green">
       <div class="stat-label">Net Revenue</div>
       <div class="stat-value" id="sl-net">—</div>
-      <div class="stat-note">After tax & fees</div>
+      <div class="stat-note">After fees (Gross Sales already excludes tax)</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Units Sold</div>
@@ -2153,7 +2153,11 @@ function renderOverview() {
   // Prefer the actual fee total from the Transactions CSV; fall back to the
   // per-item estimate from the Item Sales CSV if no transactions are loaded.
   const sqFees     = txFeeTotal > 0 ? txFeeTotal : sqFeesEst;
-  const netRev     = grossRev - taxCol - sqFees;
+  // Gross Sales from Square already excludes tax (tax is backed out
+  // separately for tax-inclusive pricing), so Net Revenue should only
+  // subtract fees — not tax collected, which was never part of Gross
+  // Sales to begin with.
+  const netRev     = grossRev - sqFees;
   const profit     = netRev - totalExp - totalCogs;
   // Margin = net profit ÷ gross revenue (conventional)
   const margin     = grossRev > 0 ? (profit / grossRev * 100).toFixed(1) : 0;
@@ -2775,7 +2779,8 @@ function renderSales() {
   // only if no transaction data has been uploaded yet.
   const txFeeTotal = txPaymentData.reduce((a,t) => a + (t.fee||0), 0);
   const feeAll   = txFeeTotal > 0 ? txFeeTotal : feeEst;
-  const netAll   = grossAll - taxAll - feeAll;
+  // Same fix as Overview — Gross Sales already excludes tax
+  const netAll   = grossAll - feeAll;
 
   let cashPct, cardPct;
   if (txPaymentData.length > 0) {
@@ -2965,7 +2970,7 @@ function renderSales() {
         const prodId = 'prod-' + prod.key.replace(/\W/g,'');
 
         const skuRows = prod.skus.map(r => {
-          const netRev  = r.gross - r.tax - r.fee;
+          const netRev  = r.gross - r.fee;
           const costPer = getCostForSku(r.sku);
           const cogs    = costPer != null ? costPer * r.units : null;
           const profit  = cogs    != null ? netRev - cogs    : null;
