@@ -1715,6 +1715,13 @@ function lsLoad(key, fallback) {
 // Debounced Firebase save — batches rapid saves into one write
 let fbSaveTimer = null;
 function fbSave() {
+  // ── CLOUD SYNC DISABLED ─────────────────────────────────────────
+  // This dashboard now runs local-only (this computer's browser storage
+  // is the single source of truth). Cloud sync was disabled after
+  // repeated Firestore issues: auth/permission errors and the 1MB
+  // per-document size limit being exceeded by sales + expense data.
+  // To re-enable, restore the code below and resolve those issues first.
+  return;
   clearTimeout(fbSaveTimer);
   fbSaveTimer = setTimeout(() => {
     const payload = {};
@@ -1739,6 +1746,8 @@ function fbSave() {
 
 // Load from Firebase on startup — overwrites localStorage with cloud data
 function fbLoad() {
+  // ── CLOUD SYNC DISABLED — see fbSave() for why ──────────────────
+  return;
   const banner = document.getElementById('sync-banner');
   if (banner) banner.style.display = 'flex';
   if (!MHH) { if (banner) banner.style.display='none'; return; }
@@ -1813,6 +1822,8 @@ function fbLoad() {
 //   mhh/tx_chunk_0, mhh/tx_chunk_1, ... → { rows: [...] }
 // ─────────────────────────────────────────────
 function fbSaveTx() {
+  // ── CLOUD SYNC DISABLED — see fbSave() for why ──────────────────
+  return;
   clearTimeout(fbSaveTxTimer);
   fbSaveTxTimer = setTimeout(async () => {
     if (!db) return;
@@ -1845,6 +1856,8 @@ function fbSaveTx() {
 }
 
 async function fbLoadTx() {
+  // ── CLOUD SYNC DISABLED — see fbSave() for why ──────────────────
+  return;
   if (!db) return;
   try {
     const metaSnap = await db.collection('mhh').doc('tx_meta').get();
