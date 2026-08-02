@@ -1035,7 +1035,7 @@
   <div id="sl-view-tax" style="display:none;">
     <div style="background:var(--honey-pale); border:1px solid var(--border); border-radius:12px; padding:18px 22px; margin-bottom:22px; font-size:0.85rem; color:var(--muted); line-height:1.6;">
       <strong style="color:var(--dark);">How this works:</strong> Select a date range below to generate your Sales &amp; Use Tax filing numbers.
-      Tax-exempt sales are all honey varieties except Hot Honey. Taxable sales are everything else (candles, skincare, hot honey, tea, gifts, etc.).
+      All sales are treated as taxable at current sales volume — there is no longer a honey tax exemption.
       Tax collected is pulled directly from what Square charged at point of sale.
     </div>
 
@@ -1071,12 +1071,12 @@
       <div class="stat-card">
         <div class="stat-label">Taxable Sales</div>
         <div class="stat-value" id="tax-taxable">—</div>
-        <div class="stat-note">Candles, skincare, hot honey, etc.</div>
+        <div class="stat-note">All products</div>
       </div>
       <div class="stat-card green">
         <div class="stat-label">Tax-Exempt Sales</div>
         <div class="stat-value" id="tax-exempt">—</div>
-        <div class="stat-note">Honey (except hot honey)</div>
+        <div class="stat-note">None — all sales are taxable</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Tax Collected</div>
@@ -2578,18 +2578,9 @@ function setTaxPreset(p) {
 // SKUs that are TAXABLE (everything not in this set is exempt)
 // Exempt = plain honey (HON-*) EXCEPT hot honey, straw honey, tasting, milkweed
 function isTaxableSku(sku) {
-  if (!sku) return true; // unknown → assume taxable to be safe
-  const s = sku.toUpperCase();
-  // Honey varieties that are exempt
-  if (s.startsWith('HON-') &&
-      !s.startsWith('HON-HOT-') &&
-      !s.startsWith('HON-STRAW') &&
-      !s.startsWith('HON-TAST') &&
-      !s.startsWith('HON-MIL-') &&
-      !s.startsWith('HON-KIT-')) {
-    return false; // tax exempt
-  }
-  return true; // everything else is taxable
+  // As of this update, all sales are treated as taxable — the previous
+  // honey tax-exemption no longer applies at current sales volume.
+  return true;
 }
 
 function renderTaxReport() {
