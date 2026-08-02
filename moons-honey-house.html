@@ -914,7 +914,7 @@
 <!-- ═══════════════ SALES ═══════════════ -->
 <section id="sales" class="section">
   <div class="section-title">Sales</div>
-  <div class="section-sub">January 2025 – April 2026 · Charlotte Farmer's Market & Soda City</div>
+  <div class="section-sub" id="salesSubtitle">Upload sales data to see date range and markets</div>
 
   <div id="salesUploadBadge"></div>
 
@@ -2776,12 +2776,28 @@ function renderSales() {
   const allPay  = salesData;
   const grossAll = allPay.reduce((a,r) => a + (parseFloat(r['Gross Sales']||r.gross||0)), 0);
   const taxAll   = allPay.reduce((a,r) => a + (parseFloat(r.Tax||r.tax||0)), 0);
-  const feeAll   = allPay.reduce((a,r) => a + (parseFloat(r['Square Fee']||r.sq_fee_allocated||0)), 0);
-  const netAll   = grossAll - taxAll - feeAll;
+  const feeEst   = allPay.reduce((a,r) => a + (parseFloat(r['Square Fee']||r.sq_fee_allocated||0)), 0);
   const unitsAll = allPay.reduce((a,r) => a + (parseFloat(r.Qty||r.qty||0)), 0);
-  const cashRev  = allPay.filter(r=>(r.Payment||r.payment_type||'')==='Cash').reduce((a,r)=>a+(parseFloat(r['Gross Sales']||0)),0);
-  const cashPct  = grossAll > 0 ? (cashRev/grossAll*100).toFixed(0) : 0;
-  const cardPct  = 100 - parseInt(cashPct);
+
+  // Prefer accurate fee + cash/card data from the Transactions CSV — same
+  // source Overview uses — falling back to the unreliable per-item estimate
+  // only if no transaction data has been uploaded yet.
+  const txFeeTotal = txPaymentData.reduce((a,t) => a + (t.fee||0), 0);
+  const feeAll   = txFeeTotal > 0 ? txFeeTotal : feeEst;
+  const netAll   = grossAll - taxAll - feeAll;
+
+  let cashPct, cardPct;
+  if (txPaymentData.length > 0) {
+    const cashRev = txPaymentData.filter(t => t.payment === 'Cash').reduce((a,t) => a + (t.grossSales||0), 0);
+    const cardRev = txPaymentData.filter(t => t.payment === 'Card').reduce((a,t) => a + (t.grossSales||0), 0);
+    const txTotal = cashRev + cardRev;
+    cashPct = txTotal > 0 ? Math.round(cashRev/txTotal*100) : 0;
+    cardPct = 100 - cashPct;
+  } else {
+    const cashRev = allPay.filter(r=>(r.Payment||r.payment_type||'')==='Cash').reduce((a,r)=>a+(parseFloat(r['Gross Sales']||0)),0);
+    cashPct = grossAll > 0 ? Math.round(cashRev/grossAll*100) : 0;
+    cardPct = 100 - cashPct;
+  }
 
   document.getElementById('sl-gross').textContent    = fmt$(grossAll);
   document.getElementById('sl-tax').textContent      = fmt$(taxAll);
@@ -2789,6 +2805,20 @@ function renderSales() {
   document.getElementById('sl-net').textContent      = fmt$(netAll);
   document.getElementById('sl-units').textContent    = fmtN(Math.round(unitsAll));
   document.getElementById('sl-cashcard').textContent = `${cashPct}% / ${cardPct}%`;
+
+  // Dynamic subtitle — actual date range and markets present in the data,
+  // instead of hardcoded text that goes stale as new data is imported.
+  const subtitleEl = document.getElementById('salesSubtitle');
+  if (subtitleEl && allPay.length > 0) {
+    const dates = allPay.map(r => r.Date || r.date).filter(Boolean).sort();
+    const fmtMonYr = (isoStr) => {
+      const d = new Date(isoStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    };
+    const dateRange = dates.length ? `${fmtMonYr(dates[0])} – ${fmtMonYr(dates[dates.length-1])}` : '';
+    const markets = [...new Set(allPay.map(r => r.Location || r.location).filter(Boolean))];
+    subtitleEl.textContent = `${dateRange}${markets.length ? ' · ' + markets.join(' & ') : ''}`;
+  }
 
   const filtGross = filtered.reduce((a,r) => a + (parseFloat(r['Gross Sales']||0)), 0);
   const filtUnits = filtered.reduce((a,r) => a + (parseFloat(r.Qty||r.qty||0)), 0);
