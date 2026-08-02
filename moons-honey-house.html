@@ -772,6 +772,7 @@
       <option value="">All markets</option>
       <option value="Charlotte">Charlotte Farmer's Market</option>
       <option value="Soda City">Soda City</option>
+      <option value="Belmont">Belmont</option>
     </select>
     <div class="ov-presets" style="display:flex; gap:6px; flex-wrap:wrap;">
       <button onclick="setOvPreset('ytd')"   class="btn btn-outline" style="padding:7px 14px; font-size:0.78rem;">YTD</button>
@@ -895,6 +896,7 @@
       <option value="">All locations</option>
       <option value="CLT">Charlotte (CLT)</option>
       <option value="Soda City">Soda City</option>
+      <option value="Belmont">Belmont</option>
       <option value="Both">Both markets</option>
       <option value="__blank__">⚠️ Unallocated</option>
     </select>
@@ -2101,11 +2103,14 @@ function renderOverview() {
     } else if (market === 'Charlotte') {
       if (loc === 'CLT') include = amt;
       else if (loc === 'Both') include = amt / 2;
-      else if (loc === '') include = amt / 2; // shared overhead split
+      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
     } else if (market === 'Soda City') {
       if (loc === 'Soda City') include = amt;
       else if (loc === 'Both') include = amt / 2;
-      else if (loc === '') include = amt / 2; // shared overhead split
+      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
+    } else if (market === 'Belmont') {
+      if (loc === 'Belmont') include = amt;
+      else if (loc === '') include = amt / 3; // shared overhead split 3 ways
     }
 
     if (include > 0) {
@@ -2389,6 +2394,7 @@ function renderExpenses() {
     const locDisplay   = e.location || '';
     const locPillColor = locDisplay === 'CLT' ? 'background:#e8f4ff;color:#1a6bb5' :
                          locDisplay === 'Soda City' ? 'background:#f0f7e8;color:#3a7a1a' :
+                         locDisplay === 'Belmont' ? 'background:#f3e8ff;color:#6a1ab5' :
                          locDisplay === 'Both' ? 'background:#f7f0e8;color:#7a5a1a' :
                          'background:#ffeaea;color:var(--red)';
     const rowStyle = isPersonal ? ' style="background:#fffaf6"' :
@@ -2425,7 +2431,7 @@ function editExpenseById(id) {
       {id:'vendor',   label:'Vendor',         type:'text',   value: e.vendor||''},
       {id:'category', label:'Category',       type:'select', value: e.category||'', options: ALL_CATEGORIES},
       {id:'location', label:'Location',       type:'select', value: e.location||'',
-        options: ['CLT','Soda City','Both','']},
+        options: ['CLT','Soda City','Belmont','Both','']},
       {id:'amount',   label:'Amount ($)',     type:'number', value: e.amount||0},
       {id:'desc',     label:'Description',   type:'textarea', value: e.desc||''},
     ],
